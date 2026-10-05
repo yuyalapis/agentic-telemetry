@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f7fb">
+  <title>Agent Telemetry — Control room</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+    :root{--ink:#192033;--muted:#7d8598;--line:#e9ebf2;--paper:#f6f7fb;--white:#fff;--violet:#7465e8;--violet-soft:#f0efff;--mint:#1ba987;--orange:#e69a47;--red:#e16b78;--shadow:0 10px 30px rgba(35,42,70,.045)}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased}button,input,select{font:inherit}.shell{max-width:1480px;margin:auto;padding:0 46px 54px}.topbar{height:82px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:12px;font:800 16px Manrope,sans-serif;letter-spacing:-.5px}.mark{width:34px;height:34px;border-radius:11px;background:#292d43;display:grid;place-items:center;color:#a99eff;box-shadow:0 4px 10px #292d4322}.mark svg{width:19px}.brand small{font:500 10px 'DM Mono',monospace;letter-spacing:1.1px;color:#9a9fb0;margin-left:2px}.top-right{display:flex;align-items:center;gap:20px;color:var(--muted);font-size:12px}.live{display:flex;align-items:center;gap:8px;color:#318c78;font-weight:600}.pulse{height:7px;width:7px;background:#39b997;border-radius:50%;box-shadow:0 0 0 4px #39b9971a}.avatar{height:33px;width:33px;border-radius:50%;background:#e8e5ff;color:#7669d6;display:grid;place-items:center;font-weight:700;font-size:11px}
+    .heading{display:flex;justify-content:space-between;align-items:flex-end;margin:36px 0 25px}.eyebrow{font:500 10px 'DM Mono',monospace;letter-spacing:1.5px;color:#9299ab;text-transform:uppercase;margin-bottom:9px}.heading h1{font:700 29px Manrope,sans-serif;letter-spacing:-1px;margin:0}.heading p{margin:7px 0 0;color:var(--muted);font-size:13px}.range{border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 12px;color:#697187;box-shadow:var(--shadow);font-size:12px}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-bottom:17px}.card{background:var(--white);border:1px solid #eceef4;border-radius:13px;box-shadow:var(--shadow)}.stat{padding:18px 20px 16px;position:relative;overflow:hidden}.stat:after{content:'';position:absolute;width:95px;height:95px;right:-22px;top:-32px;border-radius:50%;background:var(--tint,#f0efff);opacity:.75}.stat-label{font-size:11px;color:#858da0;font-weight:600;letter-spacing:.25px;position:relative;z-index:1}.stat-row{display:flex;align-items:baseline;gap:9px;margin-top:14px;position:relative;z-index:1}.stat-value{font:700 27px Manrope,sans-serif;letter-spacing:-1px}.stat-note{color:#98a0b0;font-size:11px}.stat-icon{position:absolute;top:17px;right:18px;z-index:1;width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:#fff;color:var(--violet);font-size:14px}
+    .upper{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(300px,.9fr);gap:16px;margin-bottom:17px}.panel{padding:19px 21px}.panel-head{display:flex;justify-content:space-between;align-items:flex-start}.panel-title{font:700 14px Manrope,sans-serif;letter-spacing:-.2px}.panel-sub{font-size:11px;color:#979eaf;margin-top:5px}.chart-legend{display:flex;gap:15px;font-size:10px;color:#82899a}.legend{display:flex;align-items:center;gap:6px}.legend i{height:7px;width:7px;border-radius:2px;background:var(--violet)}.legend:nth-child(2) i{background:#c5befb}.chart{height:160px;margin-top:15px;display:flex;align-items:flex-end;gap:8px;padding:0 2px 22px;border-bottom:1px solid var(--line);position:relative;background:repeating-linear-gradient(to bottom,transparent 0,transparent 39px,#f0f1f6 40px)}.bar-group{height:100%;flex:1;display:flex;align-items:flex-end;justify-content:center;gap:3px;position:relative}.bar{width:min(12px,35%);min-width:4px;border-radius:4px 4px 1px 1px;background:#7568e8;opacity:.92;transition:height .3s}.bar.secondary{background:#c8c2f9;opacity:1}.chart-labels{display:flex;justify-content:space-between;color:#a1a7b5;font:10px 'DM Mono',monospace;margin:8px 2px 0}.agents{margin-top:19px;display:flex;flex-direction:column;gap:14px}.agent-row{display:grid;grid-template-columns:30px 1fr auto;align-items:center;gap:10px}.agent-icon{width:29px;height:29px;border-radius:9px;display:grid;place-items:center;background:#f1efff;color:#786ce0;font-size:11px;font-weight:700}.agent-name{font-weight:600;font-size:12px}.agent-meta{font-size:10px;color:#a0a6b4;margin-top:3px}.agent-count{font:11px 'DM Mono',monospace;color:#626b80}.agent-track{height:3px;background:#f1f2f6;border-radius:3px;margin-top:7px;overflow:hidden}.agent-track span{display:block;height:100%;border-radius:3px;background:#978cec}
+    .events{padding:0;overflow:hidden}.events-head{padding:18px 21px 15px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}.filters{display:flex;gap:8px}.filter{border:1px solid var(--line);background:#fff;color:#7d8598;border-radius:7px;padding:7px 10px;font-size:11px;outline:none;max-width:180px}.search{width:170px}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;white-space:nowrap}th{text-align:left;text-transform:uppercase;font:500 9px 'DM Mono',monospace;letter-spacing:.9px;color:#a0a6b4;padding:12px 20px;background:#fcfcfe}td{padding:13px 20px;border-top:1px solid #f0f1f5;font-size:11px;color:#596277}tr:hover td{background:#fcfcff}.type{color:#303950;font-weight:600}.mono{font:10px 'DM Mono',monospace;color:#7e879b}.badge{font-size:9px;font-weight:700;border-radius:20px;padding:4px 8px;display:inline-block;background:#edfaf6;color:#29967d}.badge.failure,.badge.error{background:#fff0f1;color:#d26570}.badge.running,.badge.pending{background:#fff7eb;color:#d49443}.empty{height:190px;text-align:center;color:#969dae}.empty strong{display:block;color:#555f75;margin:8px 0 4px}.empty-icon{font-size:23px;color:#b0a8f4}.footer{display:flex;justify-content:space-between;margin-top:13px;color:#9da4b2;font-size:10px}.refresh{border:0;background:transparent;color:#8277df;cursor:pointer;font-size:11px}.refresh:hover{color:#5548ca}
+    @media(max-width:900px){.shell{padding:0 22px 36px}.stats{grid-template-columns:repeat(2,1fr)}.upper{grid-template-columns:1fr}.chart{height:145px}}@media(max-width:560px){.shell{padding:0 14px 28px}.topbar{height:65px}.top-right{gap:12px}.top-right .live span:last-child{display:none}.heading{margin:26px 0 18px;align-items:flex-start;gap:12px;flex-direction:column}.heading h1{font-size:25px}.stats{gap:9px}.stat{padding:14px}.stat-value{font-size:23px}.stat-note{font-size:9px}.panel{padding:16px}.events-head{align-items:flex-start;gap:13px;flex-direction:column}.filters{width:100%;flex-wrap:wrap}.filter{max-width:none;flex:1}.search{width:100%}.chart-legend{display:none}th,td{padding:12px 13px}.top-right .avatar{display:none}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand"><div class="mark"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 13.2h3.5l2.1-6 4.1 10.6 2.3-6H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4" cy="13.2" r="1" fill="currentColor"/><circle cx="20" cy="11.8" r="1" fill="currentColor"/></svg></div>agent<span style="color:#796de0">signal</span><small>ALPHA</small></div>
+    <div class="top-right"><div class="live"><i class="pulse"></i><span>Collector online</span></div><span id="clock">—</span><div class="avatar">AS</div></div>
+  </header>
+  <main>
+    <div class="heading"><div><div class="eyebrow">OVERVIEW&nbsp; / &nbsp;AGENT OPERATIONS</div><h1>Telemetry overview</h1><p>A clear view of what your agents are doing, right now.</p></div><div class="range">◷ &nbsp;Last 24 hours</div></div>
+    <section class="stats">
+      <article class="card stat" style="--tint:#f0efff"><div class="stat-label">TOTAL EVENTS</div><div class="stat-row"><div class="stat-value" id="total">—</div><div class="stat-note">in the latest 1,000</div></div><div class="stat-icon">⌁</div></article>
+      <article class="card stat" style="--tint:#e8f8f3"><div class="stat-label">ACTIVE RUNS</div><div class="stat-row"><div class="stat-value" id="runs">—</div><div class="stat-note">unique run IDs</div></div><div class="stat-icon" style="color:#1ba987">◎</div></article>
+      <article class="card stat" style="--tint:#fff4e7"><div class="stat-label">AGENTS SEEN</div><div class="stat-row"><div class="stat-value" id="agents-count">—</div><div class="stat-note">unique agent IDs</div></div><div class="stat-icon" style="color:#e69a47">✳</div></article>
+      <article class="card stat" style="--tint:#fff0f1"><div class="stat-label">ERROR EVENTS</div><div class="stat-row"><div class="stat-value" id="errors">—</div><div class="stat-note" id="error-rate">across latest events</div></div><div class="stat-icon" style="color:#e16b78">↗</div></article>
+    </section>
+    <section class="upper">
+      <article class="card panel"><div class="panel-head"><div><div class="panel-title">Event activity</div><div class="panel-sub">Events received over time</div></div><div class="chart-legend"><span class="legend"><i></i>Agent events</span><span class="legend"><i></i>Tool calls</span></div></div><div class="chart" id="chart"></div><div class="chart-labels" id="chart-labels"></div></article>
+      <article class="card panel"><div class="panel-head"><div><div class="panel-title">Most active agents</div><div class="panel-sub">By event volume</div></div><span style="color:#a0a6b4;font-size:11px">TOP 5</span></div><div class="agents" id="agent-list"></div></article>
+    </section>
+    <section class="card events">
+      <div class="events-head"><div><div class="panel-title">Live event stream</div><div class="panel-sub">Latest signals from your agentic system</div></div><div class="filters"><input class="filter search" id="search" placeholder="⌕  Search events…"><select class="filter" id="run-filter"><option value="">All runs</option></select><select class="filter" id="type-filter"><option value="">All event types</option></select><button class="refresh" id="refresh">↻ &nbsp;Refresh</button></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Event</th><th>Agent</th><th>Run</th><th>Task</th><th>Status</th><th>Time</th></tr></thead><tbody id="event-rows"></tbody></table></div>
+      <div class="footer" style="padding:0 21px 15px"><span id="shown">Waiting for events</span><span>Auto refresh · 10 sec</span></div>
+    </section>
+  </main>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let allEvents = [];
+  const safe = (s) => String(s ?? '—').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const ago = value => { const d = Date.now() - new Date(value).getTime(); if (!Number.isFinite(d)) return value || '—'; if (d < 60000) return `${Math.max(0,Math.floor(d/1000))}s ago`; if(d < 3600000) return `${Math.floor(d/60000)}m ago`; if(d < 86400000) return `${Math.floor(d/3600000)}h ago`; return new Date(value).toLocaleDateString(); };
+  const isError = e => /error|fail/i.test(`${e.status || ''} ${e.event_type || ''}`);
+  function drawChart(events) {
+    const slots = Array.from({length:24},()=>({all:0,tools:0}));
+    const now = Date.now();
+    events.forEach(e=>{const age=(now-new Date(e.timestamp).getTime())/3600000;if(age>=0&&age<24){const i=23-Math.floor(age);slots[i].all++;if(/tool/i.test(e.event_type))slots[i].tools++;}});
+    const max=Math.max(1,...slots.map(s=>s.all));
+    $('chart').innerHTML=slots.map(s=>`<div class="bar-group"><div class="bar secondary" style="height:${Math.max(s.tools?3:0,s.tools/max*100)}%" title="${s.tools} tool calls"></div><div class="bar" style="height:${Math.max(s.all?3:0,s.all/max*100)}%" title="${s.all} events"></div></div>`).join('');
+    $('chart-labels').innerHTML=['24h ago','18h','12h','6h','Now'].map(x=>`<span>${x}</span>`).join('');
+  }
+  function render() {
+    $('total').textContent=allEvents.length.toLocaleString();
+    $('runs').textContent=new Set(allEvents.map(e=>e.run_id).filter(Boolean)).size;
+    $('agents-count').textContent=new Set(allEvents.map(e=>e.agent_id).filter(Boolean)).size;
+    const errorCount=allEvents.filter(isError).length;$('errors').textContent=errorCount.toLocaleString();$('error-rate').textContent=`${allEvents.length?Math.round(errorCount/allEvents.length*100):0}% of latest events`;
+    drawChart(allEvents);
+    const counts={};allEvents.forEach(e=>{if(e.agent_id)counts[e.agent_id]=(counts[e.agent_id]||0)+1});
+    const top=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5), max=top[0]?.[1]||1;
+    $('agent-list').innerHTML=top.length?top.map(([name,n],i)=>`<div class="agent-row"><div class="agent-icon">${safe(name.slice(0,1).toUpperCase())}</div><div><div class="agent-name">${safe(name)}</div><div class="agent-track"><span style="width:${n/max*100}%"></span></div></div><div class="agent-count">${n}</div></div>`).join(''):'<div class="empty" style="height:100px;padding-top:20px">No agent activity yet</div>';
+    const runs=[...new Set(allEvents.map(e=>e.run_id).filter(Boolean))];const currentRun=$('run-filter').value;$('run-filter').innerHTML='<option value="">All runs</option>'+runs.map(r=>`<option value="${safe(r)}">${safe(r)}</option>`).join('');$('run-filter').value=runs.includes(currentRun)?currentRun:'';
+    const types=[...new Set(allEvents.map(e=>e.event_type).filter(Boolean))];const currentType=$('type-filter').value;$('type-filter').innerHTML='<option value="">All event types</option>'+types.map(t=>`<option value="${safe(t)}">${safe(t)}</option>`).join('');$('type-filter').value=types.includes(currentType)?currentType:'';
+    filterRows();
+  }
+  function filterRows(){
+    const term=$('search').value.trim().toLowerCase(),run=$('run-filter').value,type=$('type-filter').value;
+    const rows=allEvents.filter(e=>(!run||e.run_id===run)&&(!type||e.event_type===type)&&(!term||JSON.stringify(e).toLowerCase().includes(term))).slice(0,100);
+    $('event-rows').innerHTML=rows.length?rows.map(e=>{const status=e.status||'event';const cls=/fail|error/i.test(status)?'failure':/run|pending/i.test(status)?'running':'';return `<tr><td class="type">${safe(e.event_type)}</td><td>${safe(e.agent_id)}</td><td class="mono">${safe(e.run_id)}</td><td class="mono">${safe(e.task_id)}</td><td><span class="badge ${cls}">${safe(status)}</span></td><td class="mono">${safe(ago(e.timestamp))}</td></tr>`}).join(''):'<tr><td colspan="6" class="empty"><div style="padding:30px"><span class="empty-icon">✳</span><strong>No telemetry events yet</strong>Send an event to <code>POST /v1/events</code> and it will appear here.</div></td></tr>';
+    $('shown').textContent=`Showing ${rows.length} of ${allEvents.length} events`;
+  }
+  async function load(){try{const response=await fetch('/v1/events?limit=1000',{cache:'no-store'});if(!response.ok)throw new Error('Collector unavailable');const data=await response.json();allEvents=data.events||[];render()}catch(e){$('shown').textContent='Could not connect to collector';}}
+  $('search').addEventListener('input',filterRows);$('run-filter').addEventListener('change',filterRows);$('type-filter').addEventListener('change',filterRows);$('refresh').addEventListener('click',load);
+  function tick(){ $('clock').textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }tick();setInterval(tick,30000);load();setInterval(load,10000);
+</script>
+</body>
+</html>

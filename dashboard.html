@@ -27,8 +27,8 @@
     <div class="heading"><div><div class="eyebrow">OVERVIEW&nbsp; / &nbsp;AGENT OPERATIONS</div><h1>Telemetry overview</h1><p>A clear view of what your agents are doing, right now.</p></div><div class="range">◷ &nbsp;Last 24 hours</div></div>
     <section class="stats">
       <article class="card stat" style="--tint:#f0efff"><div class="stat-label">RECENT TRACES</div><div class="stat-row"><div class="stat-value" id="total">—</div><div class="stat-note">latest 250</div></div><div class="stat-icon">⌁</div></article>
-      <article class="card stat" style="--tint:#e8f8f3"><div class="stat-label">SPANS IN VIEW</div><div class="stat-row"><div class="stat-value" id="runs">—</div><div class="stat-note">across recent traces</div></div><div class="stat-icon" style="color:#1ba987">◎</div></article>
-      <article class="card stat" style="--tint:#fff4e7"><div class="stat-label">AVG TRACE DURATION</div><div class="stat-row"><div class="stat-value" id="agents-count">—</div><div class="stat-note">recent traces</div></div><div class="stat-icon" style="color:#e69a47">✳</div></article>
+      <article class="card stat" style="--tint:#e8f8f3"><div class="stat-label">SPANS IN VIEW</div><div class="stat-row"><div class="stat-value" id="spans-total">—</div><div class="stat-note">across recent traces</div></div><div class="stat-icon" style="color:#1ba987">◎</div></article>
+      <article class="card stat" style="--tint:#fff4e7"><div class="stat-label">AVG TRACE DURATION</div><div class="stat-row"><div class="stat-value" id="avg-trace-duration">—</div><div class="stat-note">recent traces</div></div><div class="stat-icon" style="color:#e69a47">✳</div></article>
       <article class="card stat" style="--tint:#fff0f1"><div class="stat-label">ERROR SPANS</div><div class="stat-row"><div class="stat-value" id="errors">—</div><div class="stat-note">OTel status = ERROR</div></div><div class="stat-icon" style="color:#e16b78">↗</div></article>
     </section>
     <section class="card trace-panel">
@@ -42,40 +42,11 @@
 </div>
 <script>
   const $ = (id) => document.getElementById(id);
-  let allEvents = [];
   let traces = [];
   let selectedTraceId = '';
   let selectedSpanId = '';
   const safe = (s) => String(s ?? '—').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const ago = value => { const d = Date.now() - new Date(value).getTime(); if (!Number.isFinite(d)) return value || '—'; if (d < 60000) return `${Math.max(0,Math.floor(d/1000))}s ago`; if(d < 3600000) return `${Math.floor(d/60000)}m ago`; if(d < 86400000) return `${Math.floor(d/3600000)}h ago`; return new Date(value).toLocaleDateString(); };
-  const isError = e => /error|fail/i.test(`${e.status || ''} ${e.event_type || ''}`);
-  function drawChart(events) {
-    const slots = Array.from({length:24},()=>({all:0,tools:0}));
-    const now = Date.now();
-    events.forEach(e=>{const age=(now-new Date(e.timestamp).getTime())/3600000;if(age>=0&&age<24){const i=23-Math.floor(age);slots[i].all++;if(/tool/i.test(e.event_type))slots[i].tools++;}});
-    const max=Math.max(1,...slots.map(s=>s.all));
-    $('chart').innerHTML=slots.map(s=>`<div class="bar-group"><div class="bar secondary" style="height:${Math.max(s.tools?3:0,s.tools/max*100)}%" title="${s.tools} tool calls"></div><div class="bar" style="height:${Math.max(s.all?3:0,s.all/max*100)}%" title="${s.all} events"></div></div>`).join('');
-    $('chart-labels').innerHTML=['24h ago','18h','12h','6h','Now'].map(x=>`<span>${x}</span>`).join('');
-  }
-  function render() {
-    $('total').textContent=allEvents.length.toLocaleString();
-    $('runs').textContent=new Set(allEvents.map(e=>e.run_id).filter(Boolean)).size;
-    $('agents-count').textContent=new Set(allEvents.map(e=>e.agent_id).filter(Boolean)).size;
-    const errorCount=allEvents.filter(isError).length;$('errors').textContent=errorCount.toLocaleString();$('error-rate').textContent=`${allEvents.length?Math.round(errorCount/allEvents.length*100):0}% of latest events`;
-    drawChart(allEvents);
-    const counts={};allEvents.forEach(e=>{if(e.agent_id)counts[e.agent_id]=(counts[e.agent_id]||0)+1});
-    const top=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5), max=top[0]?.[1]||1;
-    $('agent-list').innerHTML=top.length?top.map(([name,n],i)=>`<div class="agent-row"><div class="agent-icon">${safe(name.slice(0,1).toUpperCase())}</div><div><div class="agent-name">${safe(name)}</div><div class="agent-track"><span style="width:${n/max*100}%"></span></div></div><div class="agent-count">${n}</div></div>`).join(''):'<div class="empty" style="height:100px;padding-top:20px">No agent activity yet</div>';
-    const runs=[...new Set(allEvents.map(e=>e.run_id).filter(Boolean))];const currentRun=$('run-filter').value;$('run-filter').innerHTML='<option value="">All runs</option>'+runs.map(r=>`<option value="${safe(r)}">${safe(r)}</option>`).join('');$('run-filter').value=runs.includes(currentRun)?currentRun:'';
-    const types=[...new Set(allEvents.map(e=>e.event_type).filter(Boolean))];const currentType=$('type-filter').value;$('type-filter').innerHTML='<option value="">All event types</option>'+types.map(t=>`<option value="${safe(t)}">${safe(t)}</option>`).join('');$('type-filter').value=types.includes(currentType)?currentType:'';
-    filterRows();
-  }
-  function filterRows(){
-    const term=$('search').value.trim().toLowerCase(),run=$('run-filter').value,type=$('type-filter').value;
-    const rows=allEvents.filter(e=>(!run||e.run_id===run)&&(!type||e.event_type===type)&&(!term||JSON.stringify(e).toLowerCase().includes(term))).slice(0,100);
-    $('event-rows').innerHTML=rows.length?rows.map(e=>{const status=e.status||'event';const cls=/fail|error/i.test(status)?'failure':/run|pending/i.test(status)?'running':'';return `<tr><td class="type">${safe(e.event_type)}</td><td>${safe(e.agent_id)}</td><td class="mono">${safe(e.run_id)}</td><td class="mono">${safe(e.task_id)}</td><td><span class="badge ${cls}">${safe(status)}</span></td><td class="mono">${safe(ago(e.timestamp))}</td></tr>`}).join(''):'<tr><td colspan="6" class="empty"><div style="padding:30px"><span class="empty-icon">✳</span><strong>No telemetry events yet</strong>Send an event to <code>POST /v1/events</code> and it will appear here.</div></td></tr>';
-    $('shown').textContent=`Showing ${rows.length} of ${allEvents.length} events`;
-  }
   const formatDuration = ms => ms < 1000 ? `${ms.toFixed(ms < 10 ? 1 : 0)} ms` : `${(ms/1000).toFixed(2)} s`;
   function spanKind(span){
     const a=span.attributes||{}, op=String(a['gen_ai.operation.name']||'').toLowerCase(), name=String(span.name||'').toLowerCase(), eventNames=(span.events||[]).map(e=>e.name||'').join(' ').toLowerCase();
@@ -115,7 +86,7 @@
   async function loadTraces(){
     try{const response=await fetch('/v1/traces?limit=250',{cache:'no-store'});if(!response.ok)throw new Error();const data=await response.json();traces=data.traces||[];updateTraceStats();renderTraceList();if(traces.length)await openTrace(traces.some(t=>t.trace_id===selectedTraceId)?selectedTraceId:traces[0].trace_id);else{selectedTraceId='';$('trace-main').innerHTML='<div class="trace-empty"><span class="empty-icon">⌘</span><strong>Your agent traces will appear here</strong>Send OTLP/HTTP JSON to <code>POST /v1/traces</code><div class="otlp-hint">Set the traces endpoint to <code>http://localhost:8000/v1/traces</code></div></div>'}}catch(e){$('trace-list').innerHTML='<div class="trace-empty">Could not connect to trace collector.</div>';}
   }
-  function updateTraceStats(){const spanCount=traces.reduce((n,t)=>n+Number(t.span_count||0),0),errorCount=traces.reduce((n,t)=>n+Number(t.error_count||0),0),avg=traces.length?traces.reduce((n,t)=>n+Number(t.duration_ms||0),0)/traces.length:0;$('total').textContent=traces.length.toLocaleString();$('runs').textContent=spanCount.toLocaleString();$('agents-count').textContent=traces.length?formatDuration(avg):'—';$('errors').textContent=errorCount.toLocaleString();}
+  function updateTraceStats(){const spanCount=traces.reduce((n,t)=>n+Number(t.span_count||0),0),errorCount=traces.reduce((n,t)=>n+Number(t.error_count||0),0),avg=traces.length?traces.reduce((n,t)=>n+Number(t.duration_ms||0),0)/traces.length:0;$('total').textContent=traces.length.toLocaleString();$('spans-total').textContent=spanCount.toLocaleString();$('avg-trace-duration').textContent=traces.length?formatDuration(avg):'—';$('errors').textContent=errorCount.toLocaleString();}
   function tick(){ $('clock').textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }tick();setInterval(tick,30000);loadTraces();setInterval(loadTraces,10000);
 </script>
 </body>

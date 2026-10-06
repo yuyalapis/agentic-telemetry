@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import time
 import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,21 +20,6 @@ MAX_BODY_BYTES = 10_000_000
 def connect() -> sqlite3.Connection:
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
-    db.execute(
-        """CREATE TABLE IF NOT EXISTS events (
-            id TEXT PRIMARY KEY,
-            timestamp TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            run_id TEXT NOT NULL,
-            agent_id TEXT,
-            parent_agent_id TEXT,
-            task_id TEXT,
-            status TEXT,
-            attributes TEXT NOT NULL
-        )"""
-    )
-    db.execute("CREATE INDEX IF NOT EXISTS idx_events_run ON events(run_id, timestamp)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent_id, timestamp)")
     db.execute(
         """CREATE TABLE IF NOT EXISTS spans (
             trace_id TEXT NOT NULL,
@@ -137,34 +123,104 @@ def flatten_otlp_spans(payload: object) -> list[dict]:
     return result
 
 
-def normalize_event(value: object) -> dict:
-    if not isinstance(value, dict):
-        raise ValueError("Each event must be a JSON object")
-    event_type = value.get("event_type")
-    run_id = value.get("run_id")
-    if not isinstance(event_type, str) or not event_type.strip():
-        raise ValueError("event_type is required")
-    if not isinstance(run_id, str) or not run_id.strip():
-        raise ValueError("run_id is required")
-    attributes = value.get("attributes", {})
-    if not isinstance(attributes, dict):
-        raise ValueError("attributes must be a JSON object")
-    timestamp = value.get("timestamp")
-    if timestamp is None:
-        timestamp = datetime.now(timezone.utc).isoformat()
-    if not isinstance(timestamp, str):
-        raise ValueError("timestamp must be an ISO 8601 string")
-    return {
-        "id": str(value.get("id") or uuid.uuid4()),
-        "timestamp": timestamp,
-        "event_type": event_type.strip(),
-        "run_id": run_id.strip(),
-        "agent_id": value.get("agent_id"),
-        "parent_agent_id": value.get("parent_agent_id"),
-        "task_id": value.get("task_id"),
-        "status": value.get("status"),
-        "attributes": attributes,
+def otlp_string_attribute(key: str, value: str) -> dict:
+    return {"key": key, "value": {"stringValue": value}}
+
+
+def make_demo_span(
+    trace_id: str,
+    span_id: str,
+    parent_span_id: str | None,
+    name: str,
+    offset_ms: int,
+    duration_ms: int,
+    attributes: dict[str, str],
+    status_code: int = 1,
+    status_message: str = "",
+) -> dict:
+    start_ns = time.time_ns() - (90_000 + offset_ms) * 1_000_000
+    span = {
+        "traceId": trace_id,
+        "spanId": span_id,
+        "name": name,
+        "startTimeUnixNano": str(start_ns),
+        "endTimeUnixNano": str(start_ns + duration_ms * 1_000_000),
+        "kind": 1,
+        "attributes": [otlp_string_attribute(key, value) for key, value in attributes.items()],
+        "status": {"code": status_code},
     }
+    if parent_span_id:
+        span["parentSpanId"] = parent_span_id
+    if status_message:
+        span["status"]["message"] = status_message
+    return span
+
+
+def demo_otlp_payload() -> dict:
+    traces = []
+
+    research_trace = uuid.uuid4().hex
+    supervisor = uuid.uuid4().hex[:16]
+    researcher = uuid.uuid4().hex[:16]
+    model_call = uuid.uuid4().hex[:16]
+    search_tool = uuid.uuid4().hex[:16]
+    writer = uuid.uuid4().hex[:16]
+    traces.append([
+        make_demo_span(research_trace, supervisor, None, "invoke_agent orchestrator", 0, 2_400,
+                       {"gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": "orchestrator"}),
+        make_demo_span(research_trace, researcher, supervisor, "invoke_agent researcher", 80, 1_950,
+                       {"gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": "researcher", "agent.to": "researcher"}),
+        make_demo_span(research_trace, model_call, researcher, "chat gpt-4.1-mini", 130, 760,
+                       {"gen_ai.operation.name": "chat", "gen_ai.request.model": "gpt-4.1-mini"}),
+        make_demo_span(research_trace, search_tool, researcher, "execute_tool web_search", 1_000, 420,
+                       {"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "web_search"}),
+        make_demo_span(research_trace, writer, supervisor, "invoke_agent writer", 1_550, 690,
+                       {"gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": "writer", "handoff.to": "writer"}),
+    ])
+
+    support_trace = uuid.uuid4().hex
+    support_agent = uuid.uuid4().hex[:16]
+    lookup_tool = uuid.uuid4().hex[:16]
+    traces.append([
+        make_demo_span(support_trace, support_agent, None, "invoke_agent support_agent", 0, 1_280,
+                       {"gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": "support_agent"}),
+        make_demo_span(support_trace, lookup_tool, support_agent, "execute_tool order_lookup", 230, 810,
+                       {"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "order_lookup"},
+                       status_code=2, status_message="Order service timed out"),
+    ])
+
+    return {"resourceSpans": [
+        {"resource": {"attributes": [otlp_string_attribute("service.name", "agentic-demo")]},
+         "scopeSpans": [{"scope": {"name": "agentic-telemetry-demo"}, "spans": spans}]}
+        for spans in traces
+    ]}
+
+
+def insert_spans(db: sqlite3.Connection, spans: list[dict]) -> None:
+    db.executemany(
+        """INSERT INTO spans
+           (trace_id, span_id, parent_span_id, name, service_name, start_ns, end_ns,
+            kind, status_code, status_message, attributes, events)
+           VALUES (:trace_id, :span_id, :parent_span_id, :name, :service_name,
+                   :start_ns, :end_ns, :kind, :status_code, :status_message,
+                   :attributes, :events)
+           ON CONFLICT(trace_id, span_id) DO UPDATE SET
+             parent_span_id=excluded.parent_span_id, name=excluded.name,
+             service_name=excluded.service_name, start_ns=excluded.start_ns,
+             end_ns=excluded.end_ns, kind=excluded.kind, status_code=excluded.status_code,
+             status_message=excluded.status_message, attributes=excluded.attributes,
+             events=excluded.events""",
+        [{**span, "attributes": json.dumps(span["attributes"], ensure_ascii=False),
+          "events": json.dumps(span["events"], ensure_ascii=False)} for span in spans],
+    )
+
+
+def seed_demo_data() -> bool:
+    with connect() as db:
+        if db.execute("SELECT EXISTS(SELECT 1 FROM spans LIMIT 1)").fetchone()[0]:
+            return False
+        insert_spans(db, flatten_otlp_spans(demo_otlp_payload()))
+    return True
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -240,31 +296,7 @@ class Handler(BaseHTTPRequestHandler):
                 })
             self.send_json(200, {"traces": traces, "count": len(traces)})
             return
-        if parsed.path != "/v1/events":
-            self.send_json(404, {"error": "not_found"})
-            return
-        params = parse_qs(parsed.query)
-        clauses, values = [], []
-        for key in ("run_id", "agent_id", "event_type", "task_id", "status"):
-            if params.get(key):
-                clauses.append(f"{key} = ?")
-                values.append(params[key][0])
-        try:
-            limit = min(max(int(params.get("limit", ["100"])[0]), 1), 1000)
-        except ValueError:
-            self.send_json(400, {"error": "limit must be an integer"})
-            return
-        where = " WHERE " + " AND ".join(clauses) if clauses else ""
-        with connect() as db:
-            rows = db.execute(
-                f"SELECT * FROM events{where} ORDER BY timestamp DESC LIMIT ?", (*values, limit)
-            ).fetchall()
-        events = []
-        for row in rows:
-            event = dict(row)
-            event["attributes"] = json.loads(event["attributes"])
-            events.append(event)
-        self.send_json(200, {"events": events, "count": len(events)})
+        self.send_json(404, {"error": "not_found"})
 
     @staticmethod
     def span_json(row: sqlite3.Row) -> dict:
@@ -280,51 +312,12 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 spans = flatten_otlp_spans(self.read_json())
                 with connect() as db:
-                    db.executemany(
-                        """INSERT INTO spans
-                           (trace_id, span_id, parent_span_id, name, service_name, start_ns, end_ns,
-                            kind, status_code, status_message, attributes, events)
-                           VALUES (:trace_id, :span_id, :parent_span_id, :name, :service_name,
-                                   :start_ns, :end_ns, :kind, :status_code, :status_message,
-                                   :attributes, :events)
-                           ON CONFLICT(trace_id, span_id) DO UPDATE SET
-                             parent_span_id=excluded.parent_span_id, name=excluded.name,
-                             service_name=excluded.service_name, start_ns=excluded.start_ns,
-                             end_ns=excluded.end_ns, kind=excluded.kind, status_code=excluded.status_code,
-                             status_message=excluded.status_message, attributes=excluded.attributes,
-                             events=excluded.events""",
-                        [{**span, "attributes": json.dumps(span["attributes"], ensure_ascii=False),
-                          "events": json.dumps(span["events"], ensure_ascii=False)} for span in spans],
-                    )
+                    insert_spans(db, spans)
                 self.send_json(200, {"partialSuccess": {}})
             except (ValueError, TypeError, KeyError) as exc:
                 self.send_json(400, {"error": "invalid_otlp_trace_request", "message": str(exc)})
             return
-        if urlparse(self.path).path != "/v1/events":
-            self.send_json(404, {"error": "not_found"})
-            return
-        try:
-            payload = self.read_json()
-            batch = payload if isinstance(payload, list) else [payload]
-            if not batch or len(batch) > 100:
-                raise ValueError("Send between 1 and 100 events per request")
-            events = [normalize_event(item) for item in batch]
-            with connect() as db:
-                db.executemany(
-                    """INSERT INTO events
-                    (id, timestamp, event_type, run_id, agent_id, parent_agent_id, task_id, status, attributes)
-                    VALUES (:id, :timestamp, :event_type, :run_id, :agent_id, :parent_agent_id,
-                            :task_id, :status, :attributes)""",
-                    [
-                        {**event, "attributes": json.dumps(event["attributes"], ensure_ascii=False)}
-                        for event in events
-                    ],
-                )
-            self.send_json(202, {"accepted": len(events), "event_ids": [event["id"] for event in events]})
-        except ValueError as exc:
-            self.send_json(400, {"error": "invalid_event", "message": str(exc)})
-        except sqlite3.IntegrityError:
-            self.send_json(409, {"error": "duplicate_event_id"})
+        self.send_json(404, {"error": "not_found"})
 
     def log_message(self, fmt: str, *args: object) -> None:
         print(f"{self.log_date_time_string()} {self.address_string()} {fmt % args}")
@@ -333,5 +326,8 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     host = os.environ.get("TELEMETRY_HOST", "127.0.0.1")
     port = int(os.environ.get("TELEMETRY_PORT", "8000"))
-    print(f"Agent telemetry alpha listening on http://{host}:{port} (database: {DB_PATH})")
+    seed_enabled = os.environ.get("TELEMETRY_DEMO_DATA", "1").lower() not in {"0", "false", "no"}
+    seeded = seed_demo_data() if seed_enabled else False
+    message = " (seeded demo OTLP traces)" if seeded else ""
+    print(f"Agent telemetry alpha listening on http://{host}:{port} (database: {DB_PATH}){message}")
     ThreadingHTTPServer((host, port), Handler).serve_forever()

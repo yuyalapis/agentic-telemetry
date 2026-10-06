@@ -1,4 +1,4 @@
-# Agent Telemetry (alpha)
+# Agentic Telemetry (alpha)
 
 A lightweight telemetry collector for agentic systems. It stores events in SQLite and lets you inspect activity by run or agent. It uses only the Python standard library.
 
@@ -10,7 +10,21 @@ python3 server.py
 
 By default, the service listens on `http://127.0.0.1:8000` and creates `telemetry.db` in the current working directory. Configure `TELEMETRY_HOST`, `TELEMETRY_PORT`, or `TELEMETRY_DB` to change these defaults.
 
-Open `http://127.0.0.1:8000/` to view the dashboard. It summarizes runs, agents, errors, activity over the last 24 hours, and activity by agent from the latest 1,000 events. Filter the event stream by run, event type, or text. The dashboard refreshes every 10 seconds.
+Open `http://127.0.0.1:8000/` to view the dashboard. It lists recent OTel traces and renders each trace as a parent-child span tree with a timing waterfall. Agent calls, handoffs, LLM calls, tool calls, and error spans are highlighted. The view refreshes every 10 seconds.
+
+## Send OpenTelemetry traces
+
+The service accepts **OTLP/HTTP JSON traces** at `POST /v1/traces`. The request body follows the OTLP `ExportTraceServiceRequest` JSON shape (`resourceSpans` → `scopeSpans` → `spans`). Trace IDs, span IDs, parent IDs, timestamps, resource `service.name`, span attributes, and span events are stored. Re-sending a span with the same trace and span IDs updates it, which supports exporter retries.
+
+For example, save an OTLP JSON export as `trace.json` and send it:
+
+```sh
+curl -X POST http://127.0.0.1:8000/v1/traces \
+  -H 'Content-Type: application/json' \
+  --data-binary @trace.json
+```
+
+Configure your OTel exporter or collector to send **HTTP JSON** to `http://127.0.0.1:8000/v1/traces`. This alpha endpoint does not accept OTLP/gRPC or binary Protobuf. Existing custom events can still be sent to `POST /v1/events`.
 
 ## Send events
 
@@ -36,10 +50,12 @@ The endpoint accepts one event or a JSON array of up to 100 events. `event_type`
 curl 'http://127.0.0.1:8000/v1/events?run_id=run-123&limit=100'
 ```
 
-Combine any of these filters: `run_id`, `agent_id`, `event_type`, `task_id`, and `status`. The default `limit` is 100 and the maximum is 1,000. Use `GET /health` for a health check.
+For custom events, combine any of these filters: `run_id`, `agent_id`, `event_type`, `task_id`, and `status`. The default `limit` is 100 and the maximum is 1,000. Use `GET /health` for a health check. OTel trace summaries are available from `GET /v1/traces?limit=100`; fetch spans for a trace with `GET /v1/traces?trace_id=<trace-id>`.
 
 ## Event fields
 
-An event can include `id`, `timestamp`, `event_type`, `run_id`, `agent_id`, `parent_agent_id`, `task_id`, `status`, and `attributes`. For agent handoffs, use the same `run_id` and record the source agent or handoff details in `parent_agent_id` and `attributes`.
+OTel trace structure comes from each span's `traceId`, `spanId`, and `parentSpanId`. Agent/tool labels are inferred from span names and attributes such as `gen_ai.operation.name`, `gen_ai.agent.name`, and `gen_ai.tool.name`. Handoff spans or span events are highlighted when their names or attributes identify a handoff (for example `agent.handoff`, `agent.to`, or `handoff.to`). Keep sensitive prompt and tool payload attributes out of telemetry unless you have explicitly chosen to capture them.
 
-This is a minimal alpha release. Authentication, retention policies, distributed deployment, and metric aggregation are not included. The service listens on the loopback address by default for local development.
+Custom events can include `id`, `timestamp`, `event_type`, `run_id`, `agent_id`, `parent_agent_id`, `task_id`, `status`, and `attributes`.
+
+This is a minimal alpha release. Authentication, retention policies, distributed deployment, OTLP/gRPC, binary Protobuf, and metric aggregation are not included. The service listens on the loopback address by default for local development.
